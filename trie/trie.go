@@ -39,7 +39,7 @@ func asciiAlphabetizer(ch byte) int {
 
 var AsciiAlphabet = &alphabet{
 	min:          0,
-	max:          255, // TODO: Perform a sizeof(like) op
+	max:          255, // TODO: Perform a sizeof(byte) op
 	alphabetizer: indexResolver(asciiAlphabetizer),
 }
 
@@ -55,50 +55,83 @@ func newTrieNode(data interface{}) *trieNode {
 	}
 }
 
-func (tn *trieNode) pop(alphaIndices []int) (popd interface{}, ok bool) {
-	if len(alphaIndices) < 1 {
-		if !tn.eos {
+func (tn *trieNode) findNode(alphaIndices []int) (cur *trieNode, ok bool) {
+	cur = tn
+	i, max := 0, len(alphaIndices)
+	for {
+		if cur == nil || i >= max {
+			break
+		}
+		next := cur.children
+		if next == nil {
 			return nil, false
 		}
-		popd := tn.data
-		tn.data = nil
-		tn.eos = false
-
-		return popd, true
+		children := *next
+		first := alphaIndices[i] % len(children)
+		cur = children[first]
+		i += 1
 	}
-	if tn.children == nil {
+	if cur == nil || !cur.eos {
 		return nil, false
 	}
-	children := *tn.children
-	first := alphaIndices[0] % len(children)
-	if children[first] == nil {
+
+	return cur, true
+}
+
+func (tn *trieNode) pop(alphaIndices []int) (popd interface{}, ok bool) {
+	location, ok := tn.findNode(alphaIndices)
+	if !ok || location == nil {
 		return nil, false
 	}
-	return children[first].get(alphaIndices[1:])
 
+	popd = location.data
+	location.data = nil
+	location.eos = false
+	// TODO: Perform a check on whether all the children are set to
+	// nil, if so, clean up the array memory, free and set it to nil.
+
+	return popd, true
+}
+
+func (tn *trieNode) walk() chan interface{} {
+	results := make(chan interface{})
+	go func() {
+		defer func() {
+			close(results)
+		}()
+
+		if tn.children == nil {
+			return
+		}
+
+		children := *tn.children
+		for _, child := range children {
+			if child == nil {
+				continue
+			}
+			childChan := child.walk()
+			for res := range childChan {
+				results <- res
+			}
+			if child.eos {
+				results <- child.data
+			}
+		}
+	}()
+	return results
 }
 
 func (tn *trieNode) get(alphaIndices []int) (value interface{}, ok bool) {
-	if len(alphaIndices) < 1 {
-		if !tn.eos {
-			return nil, false
-		}
-		return tn.data, true
-	}
-	if tn.children == nil {
+	location, ok := tn.findNode(alphaIndices)
+	if !ok || location == nil {
 		return nil, false
 	}
-	children := *tn.children
-	first := alphaIndices[0] % len(children)
-	if children[first] == nil {
-		return nil, false
-	}
-	return children[first].get(alphaIndices[1:])
+	return location.data, true
 }
 
-func (tn *trieNode) add(alphaIndices []int, data interface{}, maxLen int) (prev interface{}, inserted *trieNode) {
+func (tn *trieNode) set(alphaIndices []int, data interface{}, maxLen int) (prev interface{}, inserted *trieNode) {
 	indicesLen := len(alphaIndices)
-	if indicesLen < 0 {
+	if indicesLen < 1 {
 		prev = tn.data
 		tn.data = data
 		tn.eos = true
@@ -118,12 +151,12 @@ func (tn *trieNode) add(alphaIndices []int, data interface{}, maxLen int) (prev 
 	}
 
 	child := children[first]
-	return child.add(alphaIndices[1:], data, maxLen)
+	return child.set(alphaIndices[1:], data, maxLen)
 }
 
-func (t *Trie) Add(key string, value interface{}) (prev interface{}) {
+func (t *Trie) Set(key string, value interface{}) (prev interface{}) {
 	indices := t.translator.alphabetizer(key)
-	prev, _ = t.root.add(indices, value, t.translator.max)
+	prev, _ = t.root.set(indices, value, t.translator.max)
 	return prev
 }
 
@@ -137,9 +170,13 @@ func (t *Trie) Pop(key string) (popd interface{}, ok bool) {
 	return t.root.pop(indices)
 }
 
+func (t *Trie) Walk() chan interface{} {
+	return t.root.walk()
+}
+
 func New(alphabetizer *alphabet) *Trie {
 	t := &Trie{
-		root:       nil,
+		root:       newTrieNode(""),
 		translator: alphabetizer,
 	}
 	return t
