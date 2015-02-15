@@ -119,10 +119,34 @@ func (tn *TrieNode) tagOn(pass func(*TrieNode) bool, tag interface{}) (count int
 	return count
 }
 
-func (tn *TrieNode) applyOnEos(f func(*TrieNode)) {
-	if tn.Eos {
-		f(tn)
+func (tn *TrieNode) match(pass func(*TrieNode) bool, matches *chan *TrieNode) {
+	defer func() {
+		if pass(tn) {
+			*matches <- tn
+		}
+	}()
+
+	if tn.Children == nil {
+		return
 	}
+
+	Children := *tn.Children
+	for _, child := range Children {
+		if child == nil {
+			continue
+		}
+		child.match(pass, &*matches)
+	}
+	return
+}
+
+func (tn *TrieNode) applyOnEos(f func(*TrieNode)) {
+	defer func() {
+		if tn.Eos {
+			f(tn)
+		}
+	}()
+
 	if tn.Children == nil {
 		return
 	}
@@ -224,6 +248,15 @@ func (t *Trie) Apply(f func(*TrieNode)) {
 
 func (t *Trie) Tag(pass func(*TrieNode) bool, tag interface{}) int {
 	return t.root.tagOn(pass, tag)
+}
+
+func (t *Trie) Match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
+	matches = make(chan *TrieNode)
+	go func() {
+		t.root.match(pass, &matches)
+		close(matches)
+	}()
+	return matches
 }
 
 func New(alphabetizer *alphabet) *Trie {

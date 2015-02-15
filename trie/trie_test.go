@@ -1,6 +1,7 @@
 package trie
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -140,8 +141,14 @@ func TestTagging(t *testing.T) {
 		}
 		return nonNilCount >= 2
 	}
+
 	divergentPaths := tr.Tag(potentialDir, dir)
 	if divergentPaths != 3 {
 		t.Errorf("Expected 3 divergent paths instead got: %d", divergentPaths)
+	}
+
+	matchesChan := tr.Match(potentialDir)
+	for match := range matchesChan {
+		fmt.Println(match)
 	}
 }
