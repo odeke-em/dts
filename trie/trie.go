@@ -119,6 +119,19 @@ func (tn *TrieNode) tagOn(pass func(*TrieNode) bool, tag interface{}) (count int
 	return count
 }
 
+func (tn *TrieNode) EOS() bool {
+	return tn.Eos
+}
+
+func (tn *TrieNode) Match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
+	matches = make(chan *TrieNode)
+	go func() {
+		tn.match(pass, &matches)
+		close(matches)
+	}()
+	return matches
+}
+
 func (tn *TrieNode) match(pass func(*TrieNode) bool, matches *chan *TrieNode) {
 	defer func() {
 		if pass(tn) {
@@ -257,6 +270,19 @@ func (t *Trie) Match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
 		close(matches)
 	}()
 	return matches
+}
+
+func PotentialDir(t *TrieNode) bool {
+	if t.Children == nil || len(*t.Children) < 1 {
+		return false
+	}
+	nonNilCount := 0
+	for _, child := range *t.Children {
+		if child != nil {
+			nonNilCount += 1
+		}
+	}
+	return nonNilCount >= 2
 }
 
 func New(alphabetizer *alphabet) *Trie {

@@ -129,25 +129,12 @@ func TestTagging(t *testing.T) {
 
 	dir := "dir"
 
-	potentialDir := func(t *TrieNode) bool {
-		if t.Children == nil || len(*t.Children) < 1 {
-			return false
-		}
-		nonNilCount := 0
-		for _, child := range *t.Children {
-			if child != nil {
-				nonNilCount += 1
-			}
-		}
-		return nonNilCount >= 2
-	}
-
-	divergentPaths := tr.Tag(potentialDir, dir)
+	divergentPaths := tr.Tag(PotentialDir, dir)
 	if divergentPaths != 3 {
 		t.Errorf("Expected 3 divergent paths instead got: %d", divergentPaths)
 	}
 
-	matchesChan := tr.Match(potentialDir)
+	matchesChan := tr.Match(PotentialDir)
 	for match := range matchesChan {
 		fmt.Println(match)
 	}
