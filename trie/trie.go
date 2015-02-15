@@ -20,11 +20,13 @@ func indexResolver(f indexTranslator) keyTranslator {
 	}
 }
 
-type trieNode struct {
-	data     interface{}
-	children *[]*trieNode
-	// eos is designated to terminate a sequence. Stands for End-Of-Sequence
-	eos bool
+type TrieNode struct {
+	Data interface{}
+	// Tag should help to annotate a specific feature e.g color, discovered, isDir etc
+	Tag      interface{}
+	Children *[]*TrieNode
+	// Eos(End-Of-Sequence) is designated to terminate a sequence.
+	Eos bool
 }
 
 type alphabet struct {
@@ -44,25 +46,25 @@ var AsciiAlphabet = &alphabet{
 }
 
 type Trie struct {
-	root       *trieNode
+	root       *TrieNode
 	translator *alphabet
 }
 
-func newTrieNode(data interface{}) *trieNode {
-	return &trieNode{
-		data:     data,
-		children: nil,
+func newTrieNode(data interface{}) *TrieNode {
+	return &TrieNode{
+		Data:     data,
+		Children: nil,
 	}
 }
 
-func (tn *trieNode) findNode(alphaIndices []int) (cur *trieNode, ok bool) {
+func (tn *TrieNode) findNode(alphaIndices []int) (cur *TrieNode, ok bool) {
 	cur = tn
 	i, max := 0, len(alphaIndices)
 	for {
 		if cur == nil || i >= max {
 			break
 		}
-		next := cur.children
+		next := cur.Children
 		if next == nil {
 			return nil, false
 		}
@@ -71,41 +73,83 @@ func (tn *trieNode) findNode(alphaIndices []int) (cur *trieNode, ok bool) {
 		cur = children[first]
 		i += 1
 	}
-	if cur == nil || !cur.eos {
+	if cur == nil || !cur.Eos {
 		return nil, false
 	}
 
 	return cur, true
 }
 
-func (tn *trieNode) pop(alphaIndices []int) (popd interface{}, ok bool) {
+func (tn *TrieNode) pop(alphaIndices []int) (popd interface{}, ok bool) {
 	location, ok := tn.findNode(alphaIndices)
 	if !ok || location == nil {
 		return nil, false
 	}
 
-	popd = location.data
-	location.data = nil
-	location.eos = false
-	// TODO: Perform a check on whether all the children are set to
+	popd = location.Data
+	location.Data = nil
+	location.Eos = false
+	// TODO: Perform a check on whether all the Children are set to
 	// nil, if so, clean up the array memory, free and set it to nil.
 
 	return popd, true
 }
 
-func (tn *trieNode) walk() chan interface{} {
+func (tn *TrieNode) tagOn(pass func(*TrieNode) bool, tag interface{}) (count int) {
+	count = 0
+	defer func() {
+		if pass(tn) {
+			tn.Tag = tag
+			count += 1
+		}
+	}()
+
+	if tn.Children == nil {
+		return
+	}
+
+	Children := *tn.Children
+	for _, child := range Children {
+		if child == nil {
+			continue
+		}
+		count += child.tagOn(pass, tag)
+	}
+
+	return count
+}
+
+func (tn *TrieNode) applyOnEos(f func(*TrieNode)) {
+	if tn.Eos {
+		f(tn)
+	}
+	if tn.Children == nil {
+		return
+	}
+
+	Children := *tn.Children
+	for _, child := range Children {
+		if child == nil {
+			continue
+		}
+		child.applyOnEos(f)
+	}
+	return
+}
+
+func (tn *TrieNode) walk() chan interface{} {
 	results := make(chan interface{})
 	go func() {
 		defer func() {
 			close(results)
 		}()
 
-		if tn.children == nil {
+		if tn.Children == nil {
 			return
 		}
 
-		children := *tn.children
-		for _, child := range children {
+		Children := *tn.Children
+		for _, child := range Children {
 			if child == nil {
 				continue
 			}
@@ -113,38 +157,38 @@ func (tn *trieNode) walk() chan interface{} {
 			for res := range childChan {
 				results <- res
 			}
-			if child.eos {
-				results <- child.data
+			if child.Eos {
+				results <- child.Data
 			}
 		}
 	}()
 	return results
 }
 
-func (tn *trieNode) get(alphaIndices []int) (value interface{}, ok bool) {
+func (tn *TrieNode) get(alphaIndices []int) (value interface{}, ok bool) {
 	location, ok := tn.findNode(alphaIndices)
 	if !ok || location == nil {
 		return nil, false
 	}
-	return location.data, true
+	return location.Data, true
 }
 
-func (tn *trieNode) set(alphaIndices []int, data interface{}, maxLen int) (prev interface{}, inserted *trieNode) {
+func (tn *TrieNode) set(alphaIndices []int, data interface{}, maxLen int) (prev interface{}, inserted *TrieNode) {
 	indicesLen := len(alphaIndices)
 	if indicesLen < 1 {
-		prev = tn.data
-		tn.data = data
-		tn.eos = true
+		prev = tn.Data
+		tn.Data = data
+		tn.Eos = true
 		return prev, tn
 	}
 
-	var children []*trieNode
-	if tn.children == nil {
-		children = make([]*trieNode, maxLen)
-		tn.children = &children
+	var children []*TrieNode
+	if tn.Children == nil {
+		children = make([]*TrieNode, maxLen)
+		tn.Children = &children
 	}
 
-	children = *tn.children
+	children = *tn.Children
 	first := alphaIndices[0] % maxLen
 	if children[first] == nil {
 		children[first] = newTrieNode(nil)
@@ -172,6 +216,14 @@ func (t *Trie) Pop(key string) (popd interface{}, ok bool) {
 
 func (t *Trie) Walk() chan interface{} {
 	return t.root.walk()
+}
+
+func (t *Trie) Apply(f func(*TrieNode)) {
+	t.root.applyOnEos(f)
+}
+
+func (t *Trie) Tag(pass func(*TrieNode) bool, tag interface{}) int {
+	return t.root.tagOn(pass, tag)
 }
 
 func New(alphabetizer *alphabet) *Trie {

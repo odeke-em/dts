@@ -118,3 +118,30 @@ func TestExpectedWalkOrder(t *testing.T) {
 		t.Errorf("Expected %v got %v", TestInit, results[0])
 	}
 }
+
+func TestTagging(t *testing.T) {
+	targets := []string{"/mnt/ch/gm", "/usr/bin", "/usr/lib", "/etc/ssh/", "/etc/ssl/certs/own"}
+	tr := New(AsciiAlphabet)
+	for _, path := range targets {
+		tr.Set(path, path)
+	}
+
+	dir := "dir"
+
+	potentialDir := func(t *TrieNode) bool {
+		if t.Children == nil || len(*t.Children) < 1 {
+			return false
+		}
+		nonNilCount := 0
+		for _, child := range *t.Children {
+			if child != nil {
+				nonNilCount += 1
+			}
+		}
+		return nonNilCount >= 2
+	}
+	divergentPaths := tr.Tag(potentialDir, dir)
+	if divergentPaths != 3 {
+		t.Errorf("Expected 3 divergent paths instead got: %d", divergentPaths)
+	}
+}
