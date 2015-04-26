@@ -190,12 +190,12 @@ func (tn *TrieNode) walk() chan interface{} {
 			if child == nil {
 				continue
 			}
+			if child.Eos {
+				results <- child.Data
+			}
 			childChan := child.walk()
 			for res := range childChan {
 				results <- res
-			}
-			if child.Eos {
-				results <- child.Data
 			}
 		}
 	}()
@@ -272,7 +272,7 @@ func (t *Trie) Match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
 	return matches
 }
 
-func PotentialDir(t *TrieNode) bool {
+func potentialDir(t *TrieNode, onTerminal bool) bool {
 	if t.Children == nil || len(*t.Children) < 1 {
 		return false
 	}
@@ -283,6 +283,15 @@ func PotentialDir(t *TrieNode) bool {
 		}
 	}
 	return nonNilCount >= 2
+
+}
+
+func PotentialTerminalDir(t *TrieNode) bool {
+	return potentialDir(t, false)
+}
+
+func PotentialDir(t *TrieNode) bool {
+	return potentialDir(t, false)
 }
 
 func New(alphabetizer *alphabet) *Trie {
