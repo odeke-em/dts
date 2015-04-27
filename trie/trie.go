@@ -45,6 +45,25 @@ var AsciiAlphabet = &alphabet{
 	alphabetizer: indexResolver(asciiAlphabetizer),
 }
 
+var (
+	NumericStart = 0
+	NumericEnd   = 9
+	NumericOther = (NumericEnd - NumericStart) + 1
+)
+
+func numericAlphabetizer(b byte) int {
+	if b >= '0' && b <= '9' {
+		return int(b - '0')
+	}
+	return NumericOther
+}
+
+var NumericAlphabet = &alphabet{
+	min:          NumericStart,
+	max:          NumericOther + 1,
+	alphabetizer: indexResolver(numericAlphabetizer),
+}
+
 type Trie struct {
 	root       *TrieNode
 	translator *alphabet
