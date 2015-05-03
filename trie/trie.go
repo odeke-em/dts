@@ -295,6 +295,9 @@ func potentialDir(t *TrieNode, onTerminal bool) bool {
 	if t.Children == nil || len(*t.Children) < 1 {
 		return false
 	}
+	if onTerminal && !t.Eos {
+		return false
+	}
 	nonNilCount := 0
 	for _, child := range *t.Children {
 		if child != nil {
@@ -306,11 +309,15 @@ func potentialDir(t *TrieNode, onTerminal bool) bool {
 }
 
 func PotentialTerminalDir(t *TrieNode) bool {
-	return potentialDir(t, false)
+	return potentialDir(t, true)
 }
 
 func PotentialDir(t *TrieNode) bool {
 	return potentialDir(t, false)
+}
+
+func HasEOS(t *TrieNode) bool {
+	return t != nil && t.Eos
 }
 
 func New(alphabetizer *alphabet) *Trie {
