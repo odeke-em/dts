@@ -230,28 +230,29 @@ func (tn *TrieNode) get(alphaIndices []int) (value interface{}, ok bool) {
 }
 
 func (tn *TrieNode) set(alphaIndices []int, data interface{}, maxLen int) (prev interface{}, inserted *TrieNode) {
-	indicesLen := len(alphaIndices)
-	if indicesLen < 1 {
-		prev = tn.Data
-		tn.Data = data
-		tn.Eos = true
-		return prev, tn
+	cur := tn
+
+	for _, curIndex := range alphaIndices {
+		var children []*TrieNode
+		if cur.Children == nil {
+			children = make([]*TrieNode, maxLen)
+			cur.Children = &children
+		}
+
+		children = *cur.Children
+		mod := curIndex % maxLen
+
+		if children[mod] == nil {
+			children[mod] = newTrieNode(nil)
+		}
+
+		cur = children[mod]
 	}
 
-	var children []*TrieNode
-	if tn.Children == nil {
-		children = make([]*TrieNode, maxLen)
-		tn.Children = &children
-	}
-
-	children = *tn.Children
-	first := alphaIndices[0] % maxLen
-	if children[first] == nil {
-		children[first] = newTrieNode(nil)
-	}
-
-	child := children[first]
-	return child.set(alphaIndices[1:], data, maxLen)
+	prev = cur.Data
+	cur.Data = data
+	cur.Eos = true
+	return prev, tn
 }
 
 func (t *Trie) Set(key string, value interface{}) (prev interface{}) {
