@@ -121,7 +121,11 @@ func TestExpectedWalkOrder(t *testing.T) {
 }
 
 func TestTagging(t *testing.T) {
-	targets := []string{"/mnt/ch/gm", "/usr/bin", "/usr/lib", "/etc/ssh/", "/etc/ssl/certs/own"}
+	targets := []string{
+		"/mnt/", "/mnt/ch/gm", "/mnt/ch/px",
+		"/usr/bin", "/usr/lib", "/etc/ssh/",
+		"/etc/ssl/certs/own", "/usr/sbin", "/usr/exec",
+	}
 	tr := New(AsciiAlphabet)
 	for _, path := range targets {
 		tr.Set(path, path)
@@ -130,12 +134,28 @@ func TestTagging(t *testing.T) {
 	dir := "dir"
 
 	divergentPaths := tr.Tag(PotentialDir, dir)
-	if divergentPaths != 3 {
-		t.Errorf("Expected 3 divergent paths instead got: %d", divergentPaths)
+	if divergentPaths != 4 {
+		t.Errorf("Expected 4 divergent paths instead got: %d", divergentPaths)
 	}
 
-	matchesChan := tr.Match(PotentialDir)
+	matchesChan := tr.Match(HasEOS)
 	for match := range matchesChan {
-		fmt.Println(match)
+		fmt.Println(match.Tag, match.Data)
+	}
+
+	markedDir := func(tn *TrieNode) bool {
+		if tn == nil {
+			return false
+		}
+		cast, ok := tn.Tag.(string)
+		return ok && cast == dir
+	}
+
+	dsp := tr.Match(markedDir)
+	fmt.Println("dsp", len(dsp))
+
+	extracts := tr.MatchAndHarvest(PotentialDir)
+	for extract := range extracts {
+		fmt.Println("extracted", extract.Data)
 	}
 }

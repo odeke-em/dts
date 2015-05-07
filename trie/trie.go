@@ -151,6 +151,72 @@ func (tn *TrieNode) Match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
 	return matches
 }
 
+func (tn *TrieNode) matchAndHarvest(pass func(*TrieNode) bool) (unravelled chan *TrieNode) {
+	unravelled = make(chan *TrieNode)
+
+	go func() {
+		matches := tn.Match(pass)
+
+		pops := uint(0)
+		done := make(chan bool)
+
+		for ch := range matches {
+			unravelled <- ch
+			expChan := ch.explore()
+			pops += 1
+			go func(ccChan *chan *TrieNode) {
+				chChan := *ccChan
+				for child := range chChan {
+					unravelled <- child
+				}
+				done <- true
+			}(&expChan)
+		}
+
+		for i := uint(0); i < pops; i += 1 {
+			<-done
+		}
+
+		close(unravelled)
+	}()
+
+	return unravelled
+}
+
+func (tn *TrieNode) explore() (chChan chan *TrieNode) {
+	chChan = make(chan *TrieNode)
+
+	go func() {
+		defer close(chChan)
+		if tn == nil || tn.Children == nil {
+			return
+		}
+
+		children := *(tn.Children)
+
+		pops := uint(0)
+		done := make(chan bool)
+
+		for _, child := range children {
+			pops += 1
+			go func(ctnptr **TrieNode) {
+				ctn := *ctnptr
+				cchChan := ctn.explore()
+				for ch := range cchChan {
+					chChan <- ch
+				}
+				done <- true
+			}(&child)
+		}
+
+		for i := uint(0); i < pops; i += 1 {
+			<-done
+		}
+	}()
+
+	return
+}
+
 func (tn *TrieNode) match(pass func(*TrieNode) bool, matches *chan *TrieNode) {
 	defer func() {
 		if pass(tn) {
@@ -292,15 +358,20 @@ func (t *Trie) Match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
 	return matches
 }
 
+func (t *Trie) MatchAndHarvest(pass func(*TrieNode) bool) (matches chan *TrieNode) {
+	return t.root.matchAndHarvest(pass)
+}
+
 func potentialDir(t *TrieNode, onTerminal bool) bool {
-	if t.Children == nil || len(*t.Children) < 1 {
+	if t == nil || t.Children == nil || len(*t.Children) < 1 {
 		return false
 	}
 	if onTerminal && !t.Eos {
 		return false
 	}
 	nonNilCount := 0
-	for _, child := range *t.Children {
+	children := *(t.Children)
+	for _, child := range children {
 		if child != nil {
 			nonNilCount += 1
 		}
