@@ -1,11 +1,20 @@
 package trie
 
+import (
+	"sync"
+)
+
 type keyTranslator func(key string) []int
 type indexTranslator func(b byte) int
 
 func indexResolver(f indexTranslator) keyTranslator {
+	var cacheMutex sync.Mutex
 	cache := map[string][]int{}
+
 	return func(key string) []int {
+		cacheMutex.Lock()
+		defer cacheMutex.Unlock()
+
 		retr, ok := cache[key]
 		if ok {
 			return retr
@@ -143,12 +152,7 @@ func (tn *TrieNode) EOS() bool {
 }
 
 func (tn *TrieNode) Match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
-	matches = make(chan *TrieNode)
-	go func() {
-		tn.match(pass, &matches)
-		close(matches)
-	}()
-	return matches
+	return tn.match(pass)
 }
 
 func (tn *TrieNode) matchAndHarvest(pass func(*TrieNode) bool) (unravelled chan *TrieNode) {
@@ -217,25 +221,50 @@ func (tn *TrieNode) explore() (chChan chan *TrieNode) {
 	return
 }
 
-func (tn *TrieNode) match(pass func(*TrieNode) bool, matches *chan *TrieNode) {
-	defer func() {
-		if pass(tn) {
-			*matches <- tn
+func (tn *TrieNode) match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
+	matches = make(chan *TrieNode)
+
+	go func() {
+		defer func() {
+			if pass(tn) {
+				matches <- tn
+			}
+			close(matches)
+		}()
+
+		if tn == nil || tn.Children == nil {
+			return
+		}
+
+		children := *tn.Children
+		ticks := make(chan bool)
+		spins := uint64(0)
+
+		chanOChan := make(chan chan *TrieNode)
+
+		for _, child := range children {
+			if child == nil {
+				continue
+			}
+
+			spins += 1
+			go func(results *chan chan *TrieNode) {
+				*results <- child.match(pass)
+				ticks <- true
+			}(&chanOChan)
+		}
+
+		for i := uint64(0); i < spins; i += 1 {
+			cchan := <-chanOChan
+			<-ticks
+
+			for cch := range cchan {
+				matches <- cch
+			}
 		}
 	}()
 
-	if tn.Children == nil {
-		return
-	}
-
-	Children := *tn.Children
-	for _, child := range Children {
-		if child == nil {
-			continue
-		}
-		child.match(pass, &*matches)
-	}
-	return
+	return matches
 }
 
 func (tn *TrieNode) applyOnEos(f func(*TrieNode)) {
@@ -299,13 +328,12 @@ func (tn *TrieNode) set(alphaIndices []int, data interface{}, maxLen int) (prev 
 	cur := tn
 
 	for _, curIndex := range alphaIndices {
-		var children []*TrieNode
 		if cur.Children == nil {
-			children = make([]*TrieNode, maxLen)
-			cur.Children = &children
+			cch := make([]*TrieNode, maxLen)
+			cur.Children = &cch
 		}
 
-		children = *cur.Children
+		children := *cur.Children
 		mod := curIndex % maxLen
 
 		if children[mod] == nil {
@@ -318,7 +346,7 @@ func (tn *TrieNode) set(alphaIndices []int, data interface{}, maxLen int) (prev 
 	prev = cur.Data
 	cur.Data = data
 	cur.Eos = true
-	return prev, tn
+	return prev, cur
 }
 
 func (t *Trie) Set(key string, value interface{}) (prev interface{}) {
@@ -350,12 +378,7 @@ func (t *Trie) Tag(pass func(*TrieNode) bool, tag interface{}) int {
 }
 
 func (t *Trie) Match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
-	matches = make(chan *TrieNode)
-	go func() {
-		t.root.match(pass, &matches)
-		close(matches)
-	}()
-	return matches
+	return t.root.match(pass)
 }
 
 func (t *Trie) MatchAndHarvest(pass func(*TrieNode) bool) (matches chan *TrieNode) {

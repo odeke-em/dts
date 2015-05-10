@@ -120,9 +120,35 @@ func TestExpectedWalkOrder(t *testing.T) {
 	}
 }
 
+func TestSet(t *testing.T) {
+	sets := map[string][]string{
+		"flu":              []string{"patron", "symbolic"},
+		"angle":            []string{"vim", "emacs", "sublime"},
+		"los angeles":      []string{"ample", "sample"},
+		"edmonton":         []string{"connectionz", "first"},
+		"frontPcxWUy92kml": []string{"ambelic", ""},
+	}
+
+	tr := New(AsciiAlphabet)
+	for k, v := range sets {
+		tr.Set(k, v[0])
+		vLen := len(v)
+
+		var prev interface{}
+		for i := 1; i < vLen; i += 1 {
+			prev = v[i-1]
+			evicted := tr.Set(k, v[i])
+			if evicted != prev {
+				t.Errorf("expected '%v' got '%v'", prev, evicted)
+			}
+			prev = evicted
+		}
+	}
+}
+
 func TestTagging(t *testing.T) {
 	targets := []string{
-		"/mnt/", "/mnt/ch/gm", "/mnt/ch/px",
+		"/mnt/", "/mnt/", "/mnt/ch/gm", "/mnt/ch/px",
 		"/usr/bin", "/usr/lib", "/etc/ssh/",
 		"/etc/ssl/certs/own", "/usr/sbin", "/usr/exec",
 	}
@@ -138,7 +164,7 @@ func TestTagging(t *testing.T) {
 		t.Errorf("Expected 4 divergent paths instead got: %d", divergentPaths)
 	}
 
-	matchesChan := tr.Match(HasEOS)
+	matchesChan := tr.Match(PotentialDir)
 	for match := range matchesChan {
 		fmt.Println(match.Tag, match.Data)
 	}
@@ -147,14 +173,15 @@ func TestTagging(t *testing.T) {
 		if tn == nil {
 			return false
 		}
+		return true
 		cast, ok := tn.Tag.(string)
 		return ok && cast == dir
 	}
 
 	dsp := tr.Match(markedDir)
-	fmt.Println("dsp", len(dsp))
+	fmt.Println("dsp", len(dsp), markedDir)
 
-	extracts := tr.MatchAndHarvest(PotentialDir)
+	extracts := tr.MatchAndHarvest(markedDir)
 	for extract := range extracts {
 		fmt.Println("extracted", extract.Data)
 	}
