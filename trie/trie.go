@@ -159,58 +159,35 @@ func (tn *TrieNode) matchAndHarvest(pass func(*TrieNode) bool) (unravelled chan 
 	unravelled = make(chan *TrieNode)
 
 	go func() {
-		matches := tn.Match(pass)
+		defer func() {
+			if pass(tn) {
+				unravelled <- tn
+			}
+			close(unravelled)
+		}()
 
-		pops := uint(0)
-		done := make(chan bool)
-
-		for ch := range matches {
-			unravelled <- ch
-			expChan := ch.explore()
-			pops += 1
-			go func(ccChan *chan *TrieNode) {
-				chChan := *ccChan
-				for child := range chChan {
-					unravelled <- child
-				}
-				done <- true
-			}(&expChan)
-		}
-
-		for i := uint(0); i < pops; i += 1 {
-			<-done
-		}
-
-		close(unravelled)
-	}()
-
-	return unravelled
-}
-
-func (tn *TrieNode) explore() (chChan chan *TrieNode) {
-	chChan = make(chan *TrieNode)
-
-	go func() {
-		defer close(chChan)
-		if tn == nil || tn.Children == nil {
+		if tn.Children == nil {
 			return
 		}
 
-		children := *(tn.Children)
-
 		pops := uint(0)
 		done := make(chan bool)
 
+		children := *(tn.Children)
 		for _, child := range children {
+			if child == nil {
+				continue
+			}
+
 			pops += 1
-			go func(ctnptr **TrieNode) {
-				ctn := *ctnptr
-				cchChan := ctn.explore()
-				for ch := range cchChan {
-					chChan <- ch
+			go func(cch *TrieNode) {
+				subMatch := cch.matchAndHarvest(pass)
+				for subCh := range subMatch {
+					unravelled <- subCh
 				}
+
 				done <- true
-			}(&child)
+			}(child)
 		}
 
 		for i := uint(0); i < pops; i += 1 {
@@ -218,7 +195,7 @@ func (tn *TrieNode) explore() (chChan chan *TrieNode) {
 		}
 	}()
 
-	return
+	return unravelled
 }
 
 func (tn *TrieNode) match(pass func(*TrieNode) bool) (matches chan *TrieNode) {
@@ -288,7 +265,7 @@ func (tn *TrieNode) applyOnEos(f func(*TrieNode)) {
 	return
 }
 
-func (tn *TrieNode) walk() chan interface{} {
+func (tn *TrieNode) Walk() chan interface{} {
 	results := make(chan interface{})
 	go func() {
 		defer func() {
@@ -307,7 +284,7 @@ func (tn *TrieNode) walk() chan interface{} {
 			if child.Eos {
 				results <- child.Data
 			}
-			childChan := child.walk()
+			childChan := child.Walk()
 			for res := range childChan {
 				results <- res
 			}
@@ -366,7 +343,7 @@ func (t *Trie) Pop(key string) (popd interface{}, ok bool) {
 }
 
 func (t *Trie) Walk() chan interface{} {
-	return t.root.walk()
+	return t.root.Walk()
 }
 
 func (t *Trie) Apply(f func(*TrieNode)) {

@@ -148,8 +148,8 @@ func TestSet(t *testing.T) {
 
 func TestTagging(t *testing.T) {
 	targets := []string{
-		"/mnt/", "/mnt/", "/mnt/ch/gm", "/mnt/ch/px",
-		"/usr/bin", "/usr/lib", "/etc/ssh/",
+		"/usr/", "/mnt/", "/mnt/", "/mnt/ch/", "/mnt/ch/gm", "/mnt/ch/px",
+		"/usr/bin", "/usr/lib", "/etc/", "/etc/ssh/", "/etc/ssl",
 		"/etc/ssl/certs/own", "/usr/sbin", "/usr/exec",
 	}
 	tr := New(AsciiAlphabet)
@@ -173,16 +173,29 @@ func TestTagging(t *testing.T) {
 		if tn == nil {
 			return false
 		}
-		return true
 		cast, ok := tn.Tag.(string)
 		return ok && cast == dir
 	}
 
-	dsp := tr.Match(markedDir)
-	fmt.Println("dsp", len(dsp), markedDir)
+	tagCount := tr.Tag(markedDir, dir)
+	fmt.Println("tagCount", tagCount)
+
+	// dsp := tr.Match(markedDir)
+	// fmt.Println("dsp", len(dsp), markedDir)
 
 	extracts := tr.MatchAndHarvest(markedDir)
 	for extract := range extracts {
-		fmt.Println("extracted", extract.Data)
+		wkc := extract.Walk()
+
+		for wChild := range wkc {
+			fmt.Println("curPar", extract.Data, "wChild", wChild)
+		}
+		// fmt.Println("extracted", extract.Data, "bx",  extract.Eos)
+		fmt.Println("done\n")
+	}
+
+	wk := tr.Walk()
+	for ch := range wk {
+		fmt.Println(ch)
 	}
 }
