@@ -362,6 +362,47 @@ func (t *Trie) MatchAndHarvest(pass func(*TrieNode) bool) (matches chan *TrieNod
 	return t.root.matchAndHarvest(pass)
 }
 
+func (tn *TrieNode) breadthFirstApply(apply func(interface{})) {
+	if tn == nil || tn.Children == nil {
+		return
+	}
+
+	children := *(tn.Children)
+
+	for _, child := range children {
+		if child == nil {
+			continue
+		}
+
+		if child.Eos {
+			apply(child.Data)
+		}
+	}
+
+	clog := make(chan bool)
+	clogCount := uint64(0)
+
+	for _, child := range children {
+		if child == nil {
+			continue
+		}
+
+		clogCount += 1
+		go func(cc *TrieNode) {
+			cc.breadthFirstApply(apply)
+			clog <- true
+		}(child)
+	}
+
+	for i := uint64(0); i < clogCount; i += 1 {
+		<-clog
+	}
+}
+
+func (t *Trie) BreadthFirstApply(apply func(interface{})) {
+	t.root.breadthFirstApply(apply)
+}
+
 func potentialDir(t *TrieNode, onTerminal bool) bool {
 	if t == nil || t.Children == nil || len(*t.Children) < 1 {
 		return false

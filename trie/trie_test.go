@@ -159,3 +159,21 @@ func TestTagging(t *testing.T) {
 		fmt.Println("extracted", extract.Data)
 	}
 }
+
+func TestBreadthFirstApply(t *testing.T) {
+	tr := New(AsciiAlphabet)
+	targets := []string{
+		"/mnt", "/opt/X11/bin/xlogo", "/opt/X11/include/GL", "/mnt/ch/gm",
+		"/mnt/ch/px", "/usr/bin", "/usr/lib", "/usr/sbin", "/usr/exec",
+	}
+
+	for _, path := range targets {
+		tr.Set(path, path)
+	}
+
+	f := func(d interface{}) {
+		fmt.Println("d", d)
+	}
+
+	tr.BreadthFirstApply(f)
+}
