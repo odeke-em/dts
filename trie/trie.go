@@ -1,11 +1,18 @@
 package trie
 
+import (
+	"sync"
+)
+
 type keyTranslator func(key string) []int
 type indexTranslator func(b byte) int
 
 func indexResolver(f indexTranslator) keyTranslator {
 	cache := map[string][]int{}
+	var mu sync.Mutex
 	return func(key string) []int {
+		mu.Lock()
+		defer mu.Unlock()
 		retr, ok := cache[key]
 		if ok {
 			return retr
@@ -388,6 +395,7 @@ func (tn *TrieNode) breadthFirstApply(apply func(interface{})) {
 		}
 
 		clogCount += 1
+
 		go func(cc *TrieNode) {
 			cc.breadthFirstApply(apply)
 			clog <- true
